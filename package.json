@@ -1,0 +1,27 @@
+{
+  "name": "jonbot",
+  "version": "1.0.0",
+  "description": "A discord bot of jon",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gloverab/jonbot.git"
+  },
+  "keywords": [
+    "jon",
+    "discord",
+    "bot"
+  ],
+  "author": "Alex",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gloverab/jonbot/issues"
+  },
+  "homepage": "https://github.com/gloverab/jonbot#readme",
+  "dependencies": {
+    "discord.js": "^12.2.0"
+  }
+}
