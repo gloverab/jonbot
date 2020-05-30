@@ -190,27 +190,58 @@ client.on('message', message => {
 
     // Football stuff
     const isPlayingTodayQuery = lowercaseMessageStrip.includes('whos playing today') || lowercaseMessageStrip.includes ('who is playing today')
- 
+    const isPlayingTomorrowQuery = lowercaseMessageStrip.includes('whos playing tomorrow') || lowercaseMessageStrip.includes ('who is playing tomorrow')
+    const isPlayingDayOfWeekQuery = lowercaseMessageStrip.includes('whos playing on') || lowercaseMessageStrip.includes ('who is playing on')
 
-    if (isPlayingTodayQuery) {
-      const todayDate = moment().format('YYYY-MM-DD')
-      const queryString = `events/${todayDate}`
-      apiCall('get', queryString)
-      .then(res => {
-        const numGamesToday = res.events.length
-        const noGamesToday = res.events.length === 0
+    const handleIsPlayingQuery = (date, displayString) => {
+      const queryString = `events/${date}`
+      apiCall('get', queryString).then(res => {
+        const numGames = res.events.length
+        const noGames = res.events.length === 0
 
-        if (noGamesToday) {
+        if (noGames) {
           const nextGame = `${moment(dates[0]).calendar()} at ${moment.tz(dates[0], 'America/New_York')} EST`
-          message.channel.send(`There are no games today. The next game is ${nextGame}`)
+          message.channel.send(`There are no games ${displayString}. The next game is ${nextGame}`)
         } else {
-          message.channel.send(`There are ${numGamesToday} games today.`)
+          message.channel.send(`There are ${numGames} games today.`)
           res.events.forEach(event => {
             message.channel.send(`The ${event.teams[0].name} are playing the ${event.teams[1].name} at ${moment.tz(event.event_date, 'America/New York')} EST`)
           })
         }
       })
       .catch(err => message.channel.send(err))
+    }
+ 
+
+    if (isPlayingTodayQuery) {
+      const date = moment().format('YYYY-MM-DD')
+      handleIsPlayingQuery(date, 'today')
+    } else if (isPlayingTomorrowQuery) {
+      const date = moment().add(1, 'd').format('YYYY-MM-DD')
+      handleIsPlayingQuery(date, 'tomorrow')
+    } else if (isPlayingDayOfWeekQuery) {
+      const dayName = lowercaseMessageStrip.split('on')[1]
+      let dayINeed
+      switch(dayName) {
+        case 'monday':
+          dayINeed = 1
+        case 'tuesday':
+          dayINeed = 2
+        case 'wednesday':
+          dayINeed = 3
+        case 'thursday':
+          dayINeed = 4
+        case 'friday':
+          dayINeed = 5
+        case 'saturday':
+          dayINeed = 6
+        case 'sunday':
+          dayINeed = 7
+      }
+      const today = moment().isoWeekday()
+      const date = today <= dayINeed ? moment().isoWeekday(dayINeed) : moment().add(1, 'weeks').isoWeekday(dayINeed)
+      const dateFormatted = date.format('YYYY-MM-DD')
+      handleIsPlayingQuery(dateFormatted, dayName)
     }
 
   }
