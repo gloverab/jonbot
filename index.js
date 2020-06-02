@@ -1,9 +1,11 @@
 const Discord = require('discord.js')
-const moment = require('moment')
+const moment = require('moment-timezone')
 const { apiCall } = require('./api.js')
 const { DISCORD_KEY } = require('./keys.js')
 
 const client = new Discord.Client()
+
+moment.tz.add('America/New_York|EST|80 70|0101|1Lzm0 1zb0 Op0')
 
 let dates = [
   '2020-09-11T00:20:00+0000',
@@ -74,6 +76,8 @@ let dates = [
   '2021-01-03T18:00:00+0000'
 ]
 
+const sleeperLeagueId = '515636673765777408'
+
 client.once('ready', () => {
   console.log('Ready!')
   console.log(dates)
@@ -132,6 +136,49 @@ const nintendoPhrases = [
   "I kinda miss my Switch. But I find myself mainly playing games on PC these days"
 ]
 
+const getWeekdayAsNumber = (dayName) => {
+  let dayINeed = {
+    date: 0,
+    isDate: false
+  }
+  switch(dayName) {
+    case 'mon':
+    case 'monday':
+      dayINeed.date = 1
+      break
+    case 'tue':
+    case 'tues':
+    case 'tuesday':
+      dayINeed.date = 2
+      break
+    case 'wed':
+    case 'wednesday':
+      dayINeed.date = 3
+      break
+    case 'thur':
+    case 'thurs':
+    case 'thursday':
+      dayINeed.date = 4
+      break
+    case 'fri':
+    case 'friday':
+      dayINeed.date = 5
+      break
+    case 'sat':
+    case 'saturday':
+      dayINeed.date = 6
+      break
+    case 'sun':
+    case 'sunday':
+      dayINeed.date = 7
+      break
+    default:
+      dayINeed.date = `${dayName} ${moment().format('YYYY')}`
+      dayINeed.isDate = true
+  }
+  return dayINeed
+}
+
 const isMarylandResponse = (message) => {
   return message.includes('from maryland') ||
     (message.includes('maryland') &&
@@ -141,7 +188,7 @@ const isMarylandResponse = (message) => {
 
 client.on('message', message => {
   const lowercaseMessage = message.content.toLowerCase()
-  const lowercaseMessageStrip = lowercaseMessage.replace("'", '')
+  const lowercaseMessageStrip = lowercaseMessage.replace("'", '').replace('playin ', 'playing ')
   const channelName = message.channel.name
   const wasSelfMessage = message.author.username === 'JonBot'
 
@@ -191,21 +238,51 @@ client.on('message', message => {
     // Football stuff
     const isPlayingTodayQuery = lowercaseMessageStrip.includes('whos playing today') || lowercaseMessageStrip.includes ('who is playing today')
     const isPlayingTomorrowQuery = lowercaseMessageStrip.includes('whos playing tomorrow') || lowercaseMessageStrip.includes ('who is playing tomorrow')
-    const isPlayingDayOfWeekQuery = lowercaseMessageStrip.includes('whos playing on') || lowercaseMessageStrip.includes ('who is playing on')
+    const isPlayingDayOfWeekOrDateQuery = lowercaseMessageStrip.includes('whos playing on') || lowercaseMessageStrip.includes ('who is playing on')
+    const didPlayDateQuery = lowercaseMessageStrip.includes('who played on')
+    const splitOnNext = lowercaseMessageStrip.includes('whos playing next') || lowercaseMessageStrip.includes('who is playing next')
+    const splitOnLast = lowercaseMessageStrip.includes('whos playing last') || lowercaseMessageStrip.includes('who is playing last')
+
+    const handleNextGameRequest = (additionalTextBefore = '') => {
+      const nextGameIndex = dates.findIndex(game => moment(game).isAfter(moment()))
+      const nextGameFormatted = moment(dates[nextGameIndex]).format('YYYY-MM-DD')
+      const nextGameString = `${moment(dates[nextGameIndex]).calendar()} at ${moment.tz(dates[nextGameIndex], 'America/New_York').format('h:mm a')} EST`
+      // apiCall('get', `events/${nextGameFormatted}`)
+
+      message.channel.send(`${additionalTextBefore}The next game is ${nextGameString}`)
+    }
+
+    const getGameBlock = (event) => {
+      const title = event.schedule.event_name.split(' - 2020')[0]
+      const embed = new Discord.MessageEmbed()
+        .setColor('#0099ff')
+        .setTitle(title)
+        .setURL('https://discord.js.org/')
+        .setDescription(`The ${event.teams[0].name} will take on the ${event.teams[1].name} at ${moment(event.event_date, 'America/New York').format('h:mm a')} EST`)
+        .addFields(
+          { name: `${event.teams[0].name} - ${event.teams[0].is_home ? 'Home' : 'Away'}`, value: `Current Record: ${event.teams_normalized[0].record}`, inline: true },
+          { name: `${event.teams[1].name} - ${event.teams[1].is_home ? 'Home' : 'Away'}`, value: `Current Record: ${event.teams_normalized[1].record}`, inline: true },
+        )
+        .setTimestamp()
+
+      message.channel.send(embed)
+    }
 
     const handleIsPlayingQuery = (date, displayString) => {
       const queryString = `events/${date}`
       apiCall('get', queryString).then(res => {
         const numGames = res.events.length
         const noGames = res.events.length === 0
+        const oneGame = numGames === 1
+        const displayStringGrammar = displayString !== 'today' && displayString !== 'tomorrow' ? `on ${displayString}` : displayString
 
         if (noGames) {
-          const nextGame = `${moment(dates[0]).calendar()} at ${moment.tz(dates[0], 'America/New_York')} EST`
-          message.channel.send(`There are no games ${displayString}. The next game is ${nextGame}`)
+          handleNextGameRequest(`There are no games ${displayStringGrammar}. `)
         } else {
-          message.channel.send(`There are ${numGames} games today.`)
+          message.channel.send(`There ${oneGame ? 'is' : 'are'} ${numGames} game${oneGame ? '' : 's'} ${displayStringGrammar}.`)
+
           res.events.forEach(event => {
-            message.channel.send(`The ${event.teams[0].name} are playing the ${event.teams[1].name} at ${moment.tz(event.event_date, 'America/New York')} EST`)
+            getGameBlock(event)
           })
         }
       })
@@ -219,31 +296,29 @@ client.on('message', message => {
     } else if (isPlayingTomorrowQuery) {
       const date = moment().add(1, 'd').format('YYYY-MM-DD')
       handleIsPlayingQuery(date, 'tomorrow')
-    } else if (isPlayingDayOfWeekQuery) {
-      const dayName = lowercaseMessageStrip.split('on')[1]
-      let dayINeed
-      switch(dayName) {
-        case 'monday':
-          dayINeed = 1
-        case 'tuesday':
-          dayINeed = 2
-        case 'wednesday':
-          dayINeed = 3
-        case 'thursday':
-          dayINeed = 4
-        case 'friday':
-          dayINeed = 5
-        case 'saturday':
-          dayINeed = 6
-        case 'sunday':
-          dayINeed = 7
-      }
+    } else if (isPlayingDayOfWeekOrDateQuery || splitOnNext) {
+      const dayName = splitOnNext ? lowercaseMessageStrip.split('next ')[1] : lowercaseMessageStrip.split('on ')[1]
+      const dayINeed = getWeekdayAsNumber(dayName)
       const today = moment().isoWeekday()
-      const date = today <= dayINeed ? moment().isoWeekday(dayINeed) : moment().add(1, 'weeks').isoWeekday(dayINeed)
-      const dateFormatted = date.format('YYYY-MM-DD')
-      handleIsPlayingQuery(dateFormatted, dayName)
+      const date = today <= dayINeed.date ? moment().isoWeekday(dayINeed.date) : moment().add(1, 'weeks').isoWeekday(dayINeed.date)
+      const dateToFormat = dayINeed.isDate ? dayINeed.date : date
+      const dateFormatted = moment(dateToFormat).format('YYYY-MM-DD')
+      if (dayName) {
+        handleIsPlayingQuery(dateFormatted, dayName)
+      } else {
+        handleNextGameRequest()
+      }
+    } else if (didPlayDateQuery) {
+      const dayName = splitOnLast ? lowercaseMessageStrip.split('last ')[1] : lowercaseMessageStrip.split('on ')[1]
+      const dayINeed = getWeekdayAsNumber(dayName)
+      const today = moment().isoWeekday()
+      const date = today >= dayINeed.date ? moment().isoWeekday(dayINeed.date) : moment().subtract(1, 'weeks').isoWeekday(dayINeed.date)
+      const dateToFormat = dayINeed.isDate ? dayINeed.date : date
+      const dateFormatted = moment(dateToFormat).format('YYYY-MM-DD')
+      if (dayName) {
+        handleIsPlayingQuery(dateFormatted, dayName)
+      }
     }
-
   }
 
 });

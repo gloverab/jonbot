@@ -20,7 +20,6 @@ exports.apiCall = (type, url) => new Promise((resolve, reject) => {
   
   
   req.end(function (res) {
-    console.log(res.error)
     if (res.error) {
       let message = `Error with status of ${res.error.status}`
       if (res.error.status === 429) {
